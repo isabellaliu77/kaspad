@@ -3,6 +3,7 @@ package blockprocessor
 import (
 	"github.com/kaspanet/kaspad/domain/consensus/database"
 	"github.com/kaspanet/kaspad/domain/consensus/model"
+	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
 	"github.com/kaspanet/kaspad/domain/dagconfig"
 )
 
@@ -21,9 +22,9 @@ type blockProcessor struct {
 	ghostdagManager       model.GHOSTDAGManager
 	pastMedianTimeManager model.PastMedianTimeManager
 	acceptanceDataStore   model.AcceptanceDataStore
-	blockMessageStore     model.BlockStore
+	blockStore            model.BlockStore
 	blockStatusStore      model.BlockStatusStore
-	feeDataStore          model.FeeDataStore
+	blockRelationStore    model.BlockRelationStore
 }
 
 // New instantiates a new BlockProcessor
@@ -39,9 +40,9 @@ func New(
 	pastMedianTimeManager model.PastMedianTimeManager,
 	ghostdagManager model.GHOSTDAGManager,
 	acceptanceDataStore model.AcceptanceDataStore,
-	blockMessageStore model.BlockStore,
+	blockStore model.BlockStore,
 	blockStatusStore model.BlockStatusStore,
-	feeDataStore model.FeeDataStore) model.BlockProcessor {
+	blockRelationStore model.BlockRelationStore) model.BlockProcessor {
 
 	return &blockProcessor{
 		dagParams:             dagParams,
@@ -56,22 +57,22 @@ func New(
 
 		consensusStateManager: consensusStateManager,
 		acceptanceDataStore:   acceptanceDataStore,
-		blockMessageStore:     blockMessageStore,
+		blockStore:            blockStore,
 		blockStatusStore:      blockStatusStore,
-		feeDataStore:          feeDataStore,
+		blockRelationStore:    blockRelationStore,
 	}
 }
 
 // BuildBlock builds a block over the current state, with the transactions
 // selected by the given transactionSelector
-func (bp *blockProcessor) BuildBlock(coinbaseScriptPublicKey []byte, coinbaseExtraData []byte,
-	transactionSelector model.TransactionSelector) (*model.DomainBlock, error) {
+func (bp *blockProcessor) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
+	transactions []*externalapi.DomainTransaction) (*externalapi.DomainBlock, error) {
 
 	return nil, nil
 }
 
 // ValidateAndInsertBlock validates the given block and, if valid, applies it
 // to the current state
-func (bp *blockProcessor) ValidateAndInsertBlock(block *model.DomainBlock) error {
+func (bp *blockProcessor) ValidateAndInsertBlock(block *externalapi.DomainBlock) error {
 	return nil
 }

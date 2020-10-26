@@ -2,43 +2,45 @@ package pruningmanager
 
 import (
 	"github.com/kaspanet/kaspad/domain/consensus/model"
+	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
 )
 
 // pruningManager resolves and manages the current pruning point
 type pruningManager struct {
-	dagTraversalManager   model.DAGTraversalManager
-	pruningStore          model.PruningStore
-	dagTopologyManager    model.DAGTopologyManager
-	blockStatusStore      model.BlockStatusStore
-	consensusStateManager model.ConsensusStateManager
+	dagTraversalManager model.DAGTraversalManager
+	dagTopologyManager  model.DAGTopologyManager
+
+	pruningStore        model.PruningStore
+	blockStatusStore    model.BlockStatusStore
+	consensusStateStore model.ConsensusStateStore
 }
 
 // New instantiates a new PruningManager
 func New(
 	dagTraversalManager model.DAGTraversalManager,
-	pruningStore model.PruningStore,
 	dagTopologyManager model.DAGTopologyManager,
+	pruningStore model.PruningStore,
 	blockStatusStore model.BlockStatusStore,
-	consensusStateManager model.ConsensusStateManager) model.PruningManager {
+	consensusStateStore model.ConsensusStateStore) model.PruningManager {
+
 	return &pruningManager{
-		dagTraversalManager:   dagTraversalManager,
-		pruningStore:          pruningStore,
-		dagTopologyManager:    dagTopologyManager,
-		blockStatusStore:      blockStatusStore,
-		consensusStateManager: consensusStateManager,
+		dagTraversalManager: dagTraversalManager,
+		dagTopologyManager:  dagTopologyManager,
+
+		pruningStore:        pruningStore,
+		blockStatusStore:    blockStatusStore,
+		consensusStateStore: consensusStateStore,
 	}
 }
 
 // FindNextPruningPoint finds the next pruning point from the
-// given blockHash. If none found, returns false
-func (pm *pruningManager) FindNextPruningPoint(blockGHOSTDAGData *model.BlockGHOSTDAGData) (found bool,
-	newPruningPoint *model.DomainHash, newPruningPointUTXOSet model.ReadOnlyUTXOSet, err error) {
-
-	return false, nil, nil, nil
+// given blockHash
+func (pm *pruningManager) FindNextPruningPoint(blockHash *externalapi.DomainHash) error {
+	return nil
 }
 
 // PruningPoint returns the hash of the current pruning point
-func (pm *pruningManager) PruningPoint() (*model.DomainHash, error) {
+func (pm *pruningManager) PruningPoint() (*externalapi.DomainHash, error) {
 	return nil, nil
 }
 
