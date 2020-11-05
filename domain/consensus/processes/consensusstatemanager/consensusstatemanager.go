@@ -1,20 +1,25 @@
 package consensusstatemanager
 
 import (
-	"github.com/kaspanet/kaspad/domain/consensus/database"
 	"github.com/kaspanet/kaspad/domain/consensus/model"
-	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
-	"github.com/kaspanet/kaspad/domain/dagconfig"
 )
 
 // consensusStateManager manages the node's consensus state
 type consensusStateManager struct {
-	dagParams       *dagconfig.Params
-	databaseContext *database.DomainDBContext
+	finalityDepth   uint64
+	pruningDepth    uint64
+	databaseContext model.DBManager
 
-	ghostdagManager    model.GHOSTDAGManager
-	dagTopologyManager model.DAGTopologyManager
-	pruningManager     model.PruningManager
+	ghostdagManager       model.GHOSTDAGManager
+	dagTopologyManager    model.DAGTopologyManager
+	dagTraversalManager   model.DAGTraversalManager
+	pastMedianTimeManager model.PastMedianTimeManager
+	transactionValidator  model.TransactionValidator
+	blockValidator        model.BlockValidator
+	reachabilityManager   model.ReachabilityManager
+	coinbaseManager       model.CoinbaseManager
+	mergeDepthManager     model.MergeDepthManager
+	headerTipsStore       model.HeaderTipsStore
 
 	blockStatusStore    model.BlockStatusStore
 	ghostdagDataStore   model.GHOSTDAGDataStore
@@ -24,15 +29,26 @@ type consensusStateManager struct {
 	utxoDiffStore       model.UTXODiffStore
 	blockRelationStore  model.BlockRelationStore
 	acceptanceDataStore model.AcceptanceDataStore
+	blockHeaderStore    model.BlockHeaderStore
+
+	stores []model.Store
 }
 
 // New instantiates a new ConsensusStateManager
 func New(
-	databaseContext *database.DomainDBContext,
-	dagParams *dagconfig.Params,
+	databaseContext model.DBManager,
+	finalityDepth uint64,
+	pruningDepth uint64,
 	ghostdagManager model.GHOSTDAGManager,
 	dagTopologyManager model.DAGTopologyManager,
-	pruningManager model.PruningManager,
+	dagTraversalManager model.DAGTraversalManager,
+	pastMedianTimeManager model.PastMedianTimeManager,
+	transactionValidator model.TransactionValidator,
+	blockValidator model.BlockValidator,
+	reachabilityManager model.ReachabilityManager,
+	coinbaseManager model.CoinbaseManager,
+	mergeDepthManager model.MergeDepthManager,
+
 	blockStatusStore model.BlockStatusStore,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	consensusStateStore model.ConsensusStateStore,
@@ -40,15 +56,24 @@ func New(
 	blockStore model.BlockStore,
 	utxoDiffStore model.UTXODiffStore,
 	blockRelationStore model.BlockRelationStore,
-	acceptanceDataStore model.AcceptanceDataStore) model.ConsensusStateManager {
+	acceptanceDataStore model.AcceptanceDataStore,
+	blockHeaderStore model.BlockHeaderStore,
+	headerTipsStore model.HeaderTipsStore) (model.ConsensusStateManager, error) {
 
-	return &consensusStateManager{
-		dagParams:       dagParams,
+	csm := &consensusStateManager{
+		finalityDepth:   finalityDepth,
+		pruningDepth:    pruningDepth,
 		databaseContext: databaseContext,
 
-		ghostdagManager:    ghostdagManager,
-		dagTopologyManager: dagTopologyManager,
-		pruningManager:     pruningManager,
+		ghostdagManager:       ghostdagManager,
+		dagTopologyManager:    dagTopologyManager,
+		dagTraversalManager:   dagTraversalManager,
+		pastMedianTimeManager: pastMedianTimeManager,
+		transactionValidator:  transactionValidator,
+		blockValidator:        blockValidator,
+		reachabilityManager:   reachabilityManager,
+		coinbaseManager:       coinbaseManager,
+		mergeDepthManager:     mergeDepthManager,
 
 		multisetStore:       multisetStore,
 		blockStore:          blockStore,
@@ -58,17 +83,23 @@ func New(
 		utxoDiffStore:       utxoDiffStore,
 		blockRelationStore:  blockRelationStore,
 		acceptanceDataStore: acceptanceDataStore,
+		blockHeaderStore:    blockHeaderStore,
+		headerTipsStore:     headerTipsStore,
+
+		stores: []model.Store{
+			consensusStateStore,
+			acceptanceDataStore,
+			blockStore,
+			blockStatusStore,
+			blockRelationStore,
+			multisetStore,
+			ghostdagDataStore,
+			consensusStateStore,
+			utxoDiffStore,
+			blockHeaderStore,
+			headerTipsStore,
+		},
 	}
-}
 
-// AddBlockToVirtual submits the given block to be added to the
-// current virtual. This process may result in a new virtual block
-// getting created
-func (csm *consensusStateManager) AddBlockToVirtual(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// VirtualData returns the medianTime and blueScore of the current virtual block
-func (csm *consensusStateManager) VirtualData() (medianTime int64, blueScore uint64, err error) {
-	return 0, 0, nil
+	return csm, nil
 }

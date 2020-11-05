@@ -1,42 +1,103 @@
 package acceptancedatastore
 
 import (
+	"github.com/kaspanet/kaspad/domain/consensus/database/serialization"
 	"github.com/kaspanet/kaspad/domain/consensus/model"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
+	"github.com/kaspanet/kaspad/domain/consensus/utils/dbkeys"
+	"google.golang.org/protobuf/proto"
 )
+
+var bucket = dbkeys.MakeBucket([]byte("acceptance-data"))
 
 // acceptanceDataStore represents a store of AcceptanceData
 type acceptanceDataStore struct {
+	staging  map[externalapi.DomainHash]model.AcceptanceData
+	toDelete map[externalapi.DomainHash]struct{}
 }
 
 // New instantiates a new AcceptanceDataStore
 func New() model.AcceptanceDataStore {
-	return &acceptanceDataStore{}
+	return &acceptanceDataStore{
+		staging:  make(map[externalapi.DomainHash]model.AcceptanceData),
+		toDelete: make(map[externalapi.DomainHash]struct{}),
+	}
 }
 
 // Stage stages the given acceptanceData for the given blockHash
-func (ads *acceptanceDataStore) Stage(blockHash *externalapi.DomainHash, acceptanceData *model.BlockAcceptanceData) {
-	panic("implement me")
+func (ads *acceptanceDataStore) Stage(blockHash *externalapi.DomainHash, acceptanceData model.AcceptanceData) {
+	ads.staging[*blockHash] = acceptanceData
 }
 
 func (ads *acceptanceDataStore) IsStaged() bool {
-	panic("implement me")
+	return len(ads.staging) != 0 || len(ads.toDelete) != 0
 }
 
 func (ads *acceptanceDataStore) Discard() {
-	panic("implement me")
+	ads.staging = make(map[externalapi.DomainHash]model.AcceptanceData)
+	ads.toDelete = make(map[externalapi.DomainHash]struct{})
 }
 
-func (ads *acceptanceDataStore) Commit(dbTx model.DBTxProxy) error {
-	panic("implement me")
+func (ads *acceptanceDataStore) Commit(dbTx model.DBTransaction) error {
+	for hash, acceptanceData := range ads.staging {
+		acceptanceDataBytes, err := ads.serializeAcceptanceData(acceptanceData)
+		if err != nil {
+			return err
+		}
+		err = dbTx.Put(ads.hashAsKey(&hash), acceptanceDataBytes)
+		if err != nil {
+			return err
+		}
+	}
+
+	for hash := range ads.toDelete {
+		err := dbTx.Delete(ads.hashAsKey(&hash))
+		if err != nil {
+			return err
+		}
+	}
+
+	ads.Discard()
+	return nil
 }
 
 // Get gets the acceptanceData associated with the given blockHash
-func (ads *acceptanceDataStore) Get(dbContext model.DBContextProxy, blockHash *externalapi.DomainHash) (*model.BlockAcceptanceData, error) {
-	return nil, nil
+func (ads *acceptanceDataStore) Get(dbContext model.DBReader, blockHash *externalapi.DomainHash) (model.AcceptanceData, error) {
+	if acceptanceData, ok := ads.staging[*blockHash]; ok {
+		return acceptanceData, nil
+	}
+
+	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))
+	if err != nil {
+		return nil, err
+	}
+
+	return ads.deserializeAcceptanceData(acceptanceDataBytes)
 }
 
 // Delete deletes the acceptanceData associated with the given blockHash
-func (ads *acceptanceDataStore) Delete(dbTx model.DBTxProxy, blockHash *externalapi.DomainHash) error {
-	return nil
+func (ads *acceptanceDataStore) Delete(blockHash *externalapi.DomainHash) {
+	if _, ok := ads.staging[*blockHash]; ok {
+		delete(ads.staging, *blockHash)
+		return
+	}
+	ads.toDelete[*blockHash] = struct{}{}
+}
+
+func (ads *acceptanceDataStore) serializeAcceptanceData(acceptanceData model.AcceptanceData) ([]byte, error) {
+	dbAcceptanceData := serialization.DomainAcceptanceDataToDbAcceptanceData(acceptanceData)
+	return proto.Marshal(dbAcceptanceData)
+}
+
+func (ads *acceptanceDataStore) deserializeAcceptanceData(acceptanceDataBytes []byte) (model.AcceptanceData, error) {
+	dbAcceptanceData := &serialization.DbAcceptanceData{}
+	err := proto.Unmarshal(acceptanceDataBytes, dbAcceptanceData)
+	if err != nil {
+		return nil, err
+	}
+	return serialization.DbAcceptanceDataToDomainAcceptanceData(dbAcceptanceData)
+}
+
+func (ads *acceptanceDataStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
+	return bucket.Key(hash[:])
 }

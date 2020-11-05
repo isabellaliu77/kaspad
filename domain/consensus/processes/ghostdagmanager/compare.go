@@ -1,7 +1,9 @@
 package ghostdagmanager
 
 import (
+	"github.com/kaspanet/kaspad/domain/consensus/model"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
+	"github.com/kaspanet/kaspad/domain/consensus/utils/hashes"
 )
 
 func (gm *ghostdagManager) findSelectedParent(parentHashes []*externalapi.DomainHash) (*externalapi.DomainHash, error) {
@@ -30,41 +32,35 @@ func (gm *ghostdagManager) less(blockHashA *externalapi.DomainHash, blockHashB *
 	return chosenSelectedParent == blockHashB, nil
 }
 
-func (gm *ghostdagManager) ChooseSelectedParent(blockHashA *externalapi.DomainHash,
-	blockHashB *externalapi.DomainHash) (*externalapi.DomainHash, error) {
-
-	blockAGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, blockHashA)
+func (gm *ghostdagManager) ChooseSelectedParent(blockHashes ...*externalapi.DomainHash) (*externalapi.DomainHash, error) {
+	selectedParent := blockHashes[0]
+	selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, selectedParent)
 	if err != nil {
 		return nil, err
 	}
-	blockBGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, blockHashB)
-	if err != nil {
-		return nil, err
-	}
-
-	blockABlueScore := blockAGHOSTDAGData.BlueScore
-	blockBBlueScore := blockBGHOSTDAGData.BlueScore
-	if blockABlueScore == blockBBlueScore {
-		if hashesLess(blockHashA, blockHashB) {
-			return blockHashB, nil
+	for _, blockHash := range blockHashes {
+		blockGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, blockHash)
+		if err != nil {
+			return nil, err
 		}
-		return blockHashA, nil
+
+		if gm.Less(selectedParent, selectedParentGHOSTDAGData, blockHash, blockGHOSTDAGData) {
+			selectedParent = blockHash
+			selectedParentGHOSTDAGData = blockGHOSTDAGData
+		}
 	}
-	if blockABlueScore < blockBBlueScore {
-		return blockHashB, nil
-	}
-	return blockHashA, nil
+
+	return selectedParent, nil
 }
 
-func hashesLess(a, b *externalapi.DomainHash) bool {
-	// We compare the hashes backwards because Hash is stored as a little endian byte array.
-	for i := len(a) - 1; i >= 0; i-- {
-		switch {
-		case a[i] < b[i]:
-			return true
-		case a[i] > b[i]:
-			return false
-		}
+func (gm *ghostdagManager) Less(blockHashA *externalapi.DomainHash, ghostdagDataA *model.BlockGHOSTDAGData,
+	blockHashB *externalapi.DomainHash, ghostdagDataB *model.BlockGHOSTDAGData) bool {
+
+	blockBlueScoreA := ghostdagDataA.BlueScore
+	blockBlueScoreB := ghostdagDataB.BlueScore
+	if blockBlueScoreA == blockBlueScoreB {
+		return hashes.Less(blockHashA, blockHashB)
 	}
-	return false
+
+	return blockBlueScoreA < blockBlueScoreB
 }

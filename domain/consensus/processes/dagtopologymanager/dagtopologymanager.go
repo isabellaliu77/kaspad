@@ -1,7 +1,6 @@
 package dagtopologymanager
 
 import (
-	"github.com/kaspanet/kaspad/domain/consensus/database"
 	"github.com/kaspanet/kaspad/domain/consensus/model"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
 )
@@ -9,21 +8,21 @@ import (
 // dagTopologyManager exposes methods for querying relationships
 // between blocks in the DAG
 type dagTopologyManager struct {
-	reachabilityTree   model.ReachabilityTree
-	blockRelationStore model.BlockRelationStore
-	databaseContext    *database.DomainDBContext
+	reachabilityManager model.ReachabilityManager
+	blockRelationStore  model.BlockRelationStore
+	databaseContext     model.DBReader
 }
 
 // New instantiates a new DAGTopologyManager
 func New(
-	databaseContext *database.DomainDBContext,
-	reachabilityTree model.ReachabilityTree,
+	databaseContext model.DBReader,
+	reachabilityManager model.ReachabilityManager,
 	blockRelationStore model.BlockRelationStore) model.DAGTopologyManager {
 
 	return &dagTopologyManager{
-		databaseContext:    databaseContext,
-		reachabilityTree:   reachabilityTree,
-		blockRelationStore: blockRelationStore,
+		databaseContext:     databaseContext,
+		reachabilityManager: reachabilityManager,
+		blockRelationStore:  blockRelationStore,
 	}
 }
 
@@ -65,22 +64,33 @@ func (dtm *dagTopologyManager) IsChildOf(blockHashA *externalapi.DomainHash, blo
 
 // IsAncestorOf returns true if blockHashA is a DAG ancestor of blockHashB
 func (dtm *dagTopologyManager) IsAncestorOf(blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
-	return dtm.reachabilityTree.IsDAGAncestorOf(blockHashA, blockHashB)
+	return dtm.reachabilityManager.IsDAGAncestorOf(blockHashA, blockHashB)
 }
 
 // IsDescendantOf returns true if blockHashA is a DAG descendant of blockHashB
 func (dtm *dagTopologyManager) IsDescendantOf(blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
-	return dtm.reachabilityTree.IsDAGAncestorOf(blockHashB, blockHashA)
+	return dtm.reachabilityManager.IsDAGAncestorOf(blockHashB, blockHashA)
 }
 
 // IsAncestorOfAny returns true if `blockHash` is an ancestor of at least one of `potentialDescendants`
 func (dtm *dagTopologyManager) IsAncestorOfAny(blockHash *externalapi.DomainHash, potentialDescendants []*externalapi.DomainHash) (bool, error) {
+	for _, potentialDescendant := range potentialDescendants {
+		isAncestorOf, err := dtm.IsAncestorOf(blockHash, potentialDescendant)
+		if err != nil {
+			return false, err
+		}
+
+		if isAncestorOf {
+			return true, nil
+		}
+	}
+
 	return false, nil
 }
 
 // IsInSelectedParentChainOf returns true if blockHashA is in the selected parent chain of blockHashB
 func (dtm *dagTopologyManager) IsInSelectedParentChainOf(blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
-	return false, nil
+	return dtm.reachabilityManager.IsReachabilityTreeAncestorOf(blockHashA, blockHashB)
 }
 
 func isHashInSlice(hash *externalapi.DomainHash, hashes []*externalapi.DomainHash) bool {
@@ -92,12 +102,54 @@ func isHashInSlice(hash *externalapi.DomainHash, hashes []*externalapi.DomainHas
 	return false
 }
 
-// Tips returns the current DAG tips
-func (dtm *dagTopologyManager) Tips() ([]*externalapi.DomainHash, error) {
-	panic("implement me")
-}
+func (dtm *dagTopologyManager) SetParents(blockHash *externalapi.DomainHash, parentHashes []*externalapi.DomainHash) error {
+	// Go over the block's current relations (if they exist), and remove the block from all it's current parents
+	// Note: In theory we should also remove the block from all it's children, however, in practice no block
+	// ever has it's relations updated after getting any children, therefore we skip this step
+	currentRelations, err := dtm.blockRelationStore.BlockRelation(dtm.databaseContext, blockHash)
+	if err != nil {
+		return err
+	}
+	if currentRelations != nil {
+		for _, currentParent := range currentRelations.Parents {
+			parentRelations, err := dtm.blockRelationStore.BlockRelation(dtm.databaseContext, currentParent)
+			if err != nil {
+				return err
+			}
+			for i, parentChild := range parentRelations.Children {
+				if *parentChild == *blockHash {
+					parentRelations.Children = append(parentRelations.Children[:i], parentRelations.Children[i+1:]...)
+					dtm.blockRelationStore.StageBlockRelation(currentParent, parentRelations)
+					break
+				}
+			}
+		}
+	}
 
-// AddTip adds the given tip to the current DAG tips
-func (dtm *dagTopologyManager) AddTip(tipHash *externalapi.DomainHash) error {
-	panic("implement me")
+	// Go over all new parents and add block as their child
+	for _, parent := range parentHashes {
+		parentRelations, err := dtm.blockRelationStore.BlockRelation(dtm.databaseContext, parent)
+		if err != nil {
+			return err
+		}
+		isBlockAlreadyInChildren := false
+		for _, parentChild := range parentRelations.Children {
+			if *parentChild == *blockHash {
+				isBlockAlreadyInChildren = true
+				break
+			}
+		}
+		if !isBlockAlreadyInChildren {
+			parentRelations.Children = append(parentRelations.Children, blockHash)
+			dtm.blockRelationStore.StageBlockRelation(parent, parentRelations)
+		}
+	}
+
+	// Finally - create the relations for the block itself
+	dtm.blockRelationStore.StageBlockRelation(blockHash, &model.BlockRelations{
+		Parents:  parentHashes,
+		Children: []*externalapi.DomainHash{},
+	})
+
+	return nil
 }

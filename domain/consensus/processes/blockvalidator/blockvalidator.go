@@ -1,72 +1,84 @@
 package blockvalidator
 
 import (
+	"math/big"
+
 	"github.com/kaspanet/kaspad/domain/consensus/model"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
+	"github.com/kaspanet/kaspad/util"
 )
 
 // blockValidator exposes a set of validation classes, after which
 // it's possible to determine whether either a block is valid
 type blockValidator struct {
-	consensusStateManager model.ConsensusStateManager
+	powMax                         *big.Int
+	skipPoW                        bool
+	genesisHash                    *externalapi.DomainHash
+	enableNonNativeSubnetworks     bool
+	disableDifficultyAdjustment    bool
+	powMaxBits                     uint32
+	difficultyAdjustmentWindowSize uint64
+
+	databaseContext       model.DBReader
 	difficultyManager     model.DifficultyManager
 	pastMedianTimeManager model.PastMedianTimeManager
 	transactionValidator  model.TransactionValidator
 	ghostdagManager       model.GHOSTDAGManager
+	dagTopologyManager    model.DAGTopologyManager
+	dagTraversalManager   model.DAGTraversalManager
+	coinbaseManager       model.CoinbaseManager
+	mergeDepthManager     model.MergeDepthManager
 
-	blockStatusStore model.BlockStatusStore
+	blockStore        model.BlockStore
+	ghostdagDataStore model.GHOSTDAGDataStore
+	blockHeaderStore  model.BlockHeaderStore
+	blockStatusStore  model.BlockStatusStore
 }
 
 // New instantiates a new BlockValidator
-func New(
-	consensusStateManager model.ConsensusStateManager,
+func New(powMax *big.Int,
+	skipPoW bool,
+	genesisHash *externalapi.DomainHash,
+	enableNonNativeSubnetworks bool,
+	disableDifficultyAdjustment bool,
+	difficultyAdjustmentWindowSize uint64,
+	databaseContext model.DBReader,
+
 	difficultyManager model.DifficultyManager,
 	pastMedianTimeManager model.PastMedianTimeManager,
 	transactionValidator model.TransactionValidator,
 	ghostdagManager model.GHOSTDAGManager,
+	dagTopologyManager model.DAGTopologyManager,
+	dagTraversalManager model.DAGTraversalManager,
+	coinbaseManager model.CoinbaseManager,
+	mergeDepthManager model.MergeDepthManager,
+
+	blockStore model.BlockStore,
+	ghostdagDataStore model.GHOSTDAGDataStore,
+	blockHeaderStore model.BlockHeaderStore,
 	blockStatusStore model.BlockStatusStore) model.BlockValidator {
 
 	return &blockValidator{
-		consensusStateManager: consensusStateManager,
-		difficultyManager:     difficultyManager,
-		pastMedianTimeManager: pastMedianTimeManager,
-		transactionValidator:  transactionValidator,
-		ghostdagManager:       ghostdagManager,
+		powMax:                         powMax,
+		skipPoW:                        skipPoW,
+		genesisHash:                    genesisHash,
+		enableNonNativeSubnetworks:     enableNonNativeSubnetworks,
+		disableDifficultyAdjustment:    disableDifficultyAdjustment,
+		powMaxBits:                     util.BigToCompact(powMax),
+		difficultyAdjustmentWindowSize: difficultyAdjustmentWindowSize,
+		databaseContext:                databaseContext,
+		difficultyManager:              difficultyManager,
+		pastMedianTimeManager:          pastMedianTimeManager,
+		transactionValidator:           transactionValidator,
+		ghostdagManager:                ghostdagManager,
+		dagTopologyManager:             dagTopologyManager,
+		dagTraversalManager:            dagTraversalManager,
+		coinbaseManager:                coinbaseManager,
+		mergeDepthManager:              mergeDepthManager,
 
-		blockStatusStore: blockStatusStore,
+		blockStore:        blockStore,
+		ghostdagDataStore: ghostdagDataStore,
+		blockHeaderStore:  blockHeaderStore,
+		blockStatusStore:  blockStatusStore,
 	}
-}
-
-// ValidateHeaderInIsolation validates block headers in isolation from the current
-// consensus state
-func (v *blockValidator) ValidateHeaderInIsolation(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// ValidateHeaderInContext validates block headers in the context of the current
-// consensus state
-func (v *blockValidator) ValidateHeaderInContext(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// ValidateBodyInIsolation validates block bodies in isolation from the current
-// consensus state
-func (v *blockValidator) ValidateBodyInIsolation(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// ValidateBodyInContext validates block bodies in the context of the current
-// consensus state
-func (v *blockValidator) ValidateBodyInContext(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// ValidateAgainstPastUTXO validates the block against the UTXO of its past
-func (v *blockValidator) ValidateAgainstPastUTXO(blockHash *externalapi.DomainHash) error {
-	return nil
-}
-
-// ValidateFinality makes sure the block does not violate finality
-func (v *blockValidator) ValidateFinality(blockHash *externalapi.DomainHash) error {
-	return nil
 }
