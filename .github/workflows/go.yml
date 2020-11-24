@@ -39,8 +39,3 @@ jobs:
     - name: test
       run: go test ./...
 
-
-
-
-
->>>>>>> issue#1120
